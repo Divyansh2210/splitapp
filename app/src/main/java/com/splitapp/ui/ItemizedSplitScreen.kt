@@ -32,6 +32,7 @@ fun ItemizedSplitScreen(
     transaction: Transaction,
     currentUserId: Long,
     groupId: Long?,
+    description: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -66,11 +67,6 @@ fun ItemizedSplitScreen(
             cameraUri = uri
             cameraLauncher.launch(uri)
         }
-    }
-
-    // Generate bucket options from participants
-    val bucketOptions = remember(itemizedState.allParticipantIds, itemizedState.participantNames) {
-        generateBucketOptions(itemizedState.allParticipantIds, itemizedState.participantNames)
     }
 
     // Per-person totals
@@ -236,7 +232,8 @@ fun ItemizedSplitScreen(
                 ItemRow(
                     item = item,
                     bucket = itemizedState.buckets[item.id] ?: itemizedState.allParticipantIds,
-                    bucketOptions = bucketOptions,
+                    allParticipantIds = itemizedState.allParticipantIds,
+                    participantNames = itemizedState.participantNames,
                     onBucketChange = { ids -> vm.assignBucket(item.id, ids) },
                     onEdit = { editingItem = item },
                     onDelete = { vm.deleteItem(item.id) }
@@ -304,7 +301,7 @@ fun ItemizedSplitScreen(
                         Text("Re-scan")
                     }
                     Button(
-                        onClick = { vm.submitItemizedSplit(transaction, groupId) },
+                        onClick = { vm.submitItemizedSplit(transaction, groupId, description) },
                         modifier = Modifier.weight(1f),
                         enabled = itemizedState.items.isNotEmpty()
                     ) {
@@ -333,28 +330,30 @@ fun ItemizedSplitScreen(
         EditItemDialog(
             item = item,
             onDismiss = { editingItem = null },
-            onSave = { newName, newPrice ->
-                vm.editItem(item.id, newName, newPrice)
+            onSave = { newName, newPrice, isFee ->
+                vm.editItem(item.id, newName, newPrice, isFee)
                 editingItem = null
             }
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ItemRow(
     item: OrderItem,
     bucket: Set<Long>,
-    bucketOptions: List<Pair<String, Set<Long>>>,
+    allParticipantIds: Set<Long>,
+    participantNames: Map<Long, String>,
     onBucketChange: (Set<Long>) -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var showParticipants by remember { mutableStateOf(false) }
 
-    // Find current bucket label
-    val currentLabel = bucketOptions.find { it.second == bucket }?.first ?: "Custom"
+    // Build display label for current bucket
+    val bucketLabel = if (bucket == allParticipantIds) "All" else {
+        bucket.mapNotNull { participantNames[it] }.sorted().joinToString(", ")
+    }
 
     Card(
         Modifier.fillMaxWidth(),
@@ -391,47 +390,60 @@ private fun ItemRow(
                         fontWeight = FontWeight.Medium
                     )
                 }
-                if (!item.isFee) {
-                    IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(18.dp))
-                    }
+                IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(18.dp))
                 }
                 IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Default.Delete, contentDescription = "Delete", modifier = Modifier.size(18.dp))
                 }
             }
 
-            // Bucket dropdown
+            // Participant assignment — multi-select checkboxes
             if (!item.isFee) {
                 Spacer(Modifier.height(4.dp))
-                ExposedDropdownMenuBox(
-                    expanded = expanded,
-                    onExpandedChange = { expanded = it }
+                TextButton(
+                    onClick = { showParticipants = !showParticipants },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
-                    OutlinedTextField(
-                        value = currentLabel,
-                        onValueChange = {},
-                        readOnly = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(),
-                        label = { Text("Split between") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodySmall
+                    Icon(Icons.Default.Group, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        bucketLabel,
+                        style = MaterialTheme.typography.bodySmall
                     )
-                    ExposedDropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
-                    ) {
-                        bucketOptions.forEach { (label, ids) ->
-                            DropdownMenuItem(
-                                text = { Text(label) },
-                                onClick = {
-                                    onBucketChange(ids)
-                                    expanded = false
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        if (showParticipants) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (showParticipants) "Collapse" else "Expand",
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                if (showParticipants) {
+                    // "All" shortcut
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = bucket == allParticipantIds,
+                            onCheckedChange = { checked ->
+                                if (checked) onBucketChange(allParticipantIds)
+                            }
+                        )
+                        Text("All", style = MaterialTheme.typography.bodySmall)
+                    }
+                    // Individual participants
+                    allParticipantIds.forEach { pid ->
+                        val name = participantNames[pid] ?: "Unknown"
+                        val isChecked = pid in bucket
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = isChecked,
+                                onCheckedChange = { checked ->
+                                    val newBucket = if (checked) bucket + pid else bucket - pid
+                                    // Don't allow empty bucket
+                                    if (newBucket.isNotEmpty()) onBucketChange(newBucket)
                                 }
                             )
+                            Text(name, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -503,10 +515,11 @@ private fun AddItemDialog(
 private fun EditItemDialog(
     item: OrderItem,
     onDismiss: () -> Unit,
-    onSave: (String, Double) -> Unit
+    onSave: (String, Double, Boolean) -> Unit
 ) {
     var name by remember { mutableStateOf(item.name) }
     var priceText by remember { mutableStateOf("%.2f".format(item.price)) }
+    var isFee by remember { mutableStateOf(item.isFee) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -528,6 +541,10 @@ private fun EditItemDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = isFee, onCheckedChange = { isFee = it })
+                    Text("This is a fee/charge (shared by all)")
+                }
             }
         },
         confirmButton = {
@@ -535,7 +552,7 @@ private fun EditItemDialog(
                 onClick = {
                     val price = priceText.toDoubleOrNull()
                     if (name.isNotBlank() && price != null && price > 0) {
-                        onSave(name, price)
+                        onSave(name, price, isFee)
                     }
                 },
                 enabled = name.isNotBlank() && (priceText.toDoubleOrNull() ?: 0.0) > 0
@@ -547,39 +564,6 @@ private fun EditItemDialog(
     )
 }
 
-/**
- * Generate all non-empty subsets of participants as dropdown options.
- * Sorted by size descending ("All" first, then pairs, then singles).
- */
-fun generateBucketOptions(
-    participantIds: Set<Long>,
-    names: Map<Long, String>
-): List<Pair<String, Set<Long>>> {
-    val ids = participantIds.toList()
-    val n = ids.size
-    if (n == 0) return emptyList()
-
-    val options = mutableListOf<Pair<String, Set<Long>>>()
-
-    // Generate all non-empty subsets via bitmask
-    for (mask in 1 until (1 shl n)) {
-        val subset = mutableSetOf<Long>()
-        for (i in 0 until n) {
-            if (mask and (1 shl i) != 0) {
-                subset.add(ids[i])
-            }
-        }
-        val label = if (subset.size == n) {
-            "All"
-        } else {
-            subset.mapNotNull { names[it] }.sorted().joinToString(" + ")
-        }
-        options.add(Pair(label, subset))
-    }
-
-    // Sort: largest subsets first, then alphabetical
-    return options.sortedWith(compareByDescending<Pair<String, Set<Long>>> { it.second.size }.thenBy { it.first })
-}
 
 private fun createImageUri(context: Context): Uri {
     val dir = File(context.cacheDir, "receipt_images").apply { mkdirs() }

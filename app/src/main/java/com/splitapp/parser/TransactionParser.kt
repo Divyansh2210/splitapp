@@ -32,13 +32,13 @@ object TransactionParser {
 
     // UPI ID or merchant name after common markers
     private val UPI_ID_PATTERN = Regex(
-        """(?:VPA|UPI[:\s]+|to\s+)([a-zA-Z0-9.\-_]+@[a-zA-Z0-9]+)""",
+        """(?:VPA[:\s]*|UPI[:\s]+|to\s+)([a-zA-Z0-9.\-_]+@[a-zA-Z0-9]+)""",
         RegexOption.IGNORE_CASE
     )
 
     // Primary merchant pattern: "at/to/for MERCHANT_NAME" — stops at boundary words
     private val MERCHANT_PATTERN = Regex(
-        """(?:at|to|for)\s+([A-Za-z0-9&'*/#][\w &'.\-*/# ]*?)(?=\s+(?:for|on|at|Rs|INR|₹|Avl|Limit|Due|If|Available|Current|Not)\b|\.\s|$)""",
+        """(?:at|to|for)\s+(?!(?:Rs|INR|₹|SGD|USD|EUR|GBP|AED)\b)([A-Za-z0-9&'*/#][\w &'.\-*/# ]*?)(?=\s+(?:for|on|at|Rs|INR|₹|Avl|Limit|Due|If|Available|Current|Not)\b|\.\s|$)""",
         RegexOption.IGNORE_CASE
     )
 

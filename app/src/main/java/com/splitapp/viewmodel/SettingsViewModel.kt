@@ -23,7 +23,6 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     val apiKey = prefs.apiKey
     val geminiApiKey = prefs.geminiApiKey
-    val monitoringEnabled = prefs.monitoringEnabled
 
     private val _syncState = MutableStateFlow<SettingsUiState>(SettingsUiState.Idle)
     val syncState: StateFlow<SettingsUiState> = _syncState
@@ -34,10 +33,6 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     fun saveGeminiApiKey(key: String) {
         viewModelScope.launch { prefs.setGeminiApiKey(key) }
-    }
-
-    fun setMonitoring(enabled: Boolean) {
-        viewModelScope.launch { prefs.setMonitoringEnabled(enabled) }
     }
 
     fun syncFriendsAndGroups() {

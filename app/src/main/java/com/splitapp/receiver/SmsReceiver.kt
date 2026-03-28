@@ -11,12 +11,12 @@ import androidx.core.app.NotificationCompat
 import com.splitapp.R
 import com.splitapp.SplitActivity
 import com.splitapp.SplitApplication
-import com.splitapp.data.PreferencesStore
-import com.splitapp.model.TransactionStatus
+
+
 import com.splitapp.parser.TransactionParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
+
 import kotlinx.coroutines.launch
 
 class SmsReceiver : BroadcastReceiver() {
@@ -35,13 +35,9 @@ class SmsReceiver : BroadcastReceiver() {
         // Group multi-part SMS by sender
         val grouped = messages.groupBy { it.originatingAddress ?: "" }
 
-        val prefs = PreferencesStore(context)
         val db = SplitApplication.database(context)
 
         CoroutineScope(Dispatchers.IO).launch {
-            val monitoringEnabled = prefs.monitoringEnabled.first()
-            if (!monitoringEnabled) return@launch
-
             for ((sender, parts) in grouped) {
                 val body = parts.joinToString("") { it.messageBody }
                 val transaction = TransactionParser.parse(sender, body) ?: continue

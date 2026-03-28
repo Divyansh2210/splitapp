@@ -92,10 +92,20 @@ class SplitViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value = current.copy(selectedGroupId = null)
         } else {
             // Select group — replace splits with all group members, equal split
-            val newSplits = group.members.map { FriendSplit(it, 0f) }
-            val rebalanced = equalSplit(newSplits, transaction.amount)
-            _uiState.value = current.copy(selectedGroupId = group.id, selectedSplits = rebalanced)
+            applyGroupSelection(group, transaction, current)
         }
+    }
+
+    /** Apply group selection (called directly or after confirmation). */
+    fun applyGroupSelection(group: Group, transaction: Transaction, current: SplitUiState.Ready) {
+        val newSplits = group.members.map { FriendSplit(it, 0f) }
+        val rebalanced = equalSplit(newSplits, transaction.amount)
+        _uiState.value = current.copy(selectedGroupId = group.id, selectedSplits = rebalanced)
+    }
+
+    /** Check if selecting a group would replace existing manual splits. */
+    fun hasManualSplits(current: SplitUiState.Ready): Boolean {
+        return current.selectedSplits.isNotEmpty() && current.selectedGroupId == null
     }
 
     fun toggleFriend(friend: Friend, transaction: Transaction, currentSplits: List<FriendSplit>) {
@@ -283,13 +293,23 @@ class SplitViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun editItem(itemId: String, newName: String, newPrice: Double) {
+    fun editItem(itemId: String, newName: String, newPrice: Double, isFee: Boolean? = null) {
         val current = _itemizedState.value
         _itemizedState.value = current.copy(
             items = current.items.map {
-                if (it.id == itemId) it.copy(name = newName, price = newPrice) else it
+                if (it.id == itemId) {
+                    val updatedItem = it.copy(name = newName, price = newPrice)
+                    if (isFee != null) updatedItem.copy(isFee = isFee) else updatedItem
+                } else it
             }
         )
+        // If item became a fee, ensure it's assigned to all participants
+        if (isFee == true) {
+            val allIds = current.allParticipantIds
+            _itemizedState.value = _itemizedState.value.copy(
+                buckets = _itemizedState.value.buckets + (itemId to allIds)
+            )
+        }
     }
 
     fun deleteItem(itemId: String) {
@@ -320,10 +340,8 @@ class SplitViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Submit the itemized split to Splitwise. */
-    fun submitItemizedSplit(transaction: Transaction, groupId: Long?) {
+    fun submitItemizedSplit(transaction: Transaction, groupId: Long?, description: String) {
         viewModelScope.launch {
-            val readyState = _uiState.value as? SplitUiState.Ready
-            val description = readyState?.description ?: transaction.description
             _uiState.value = SplitUiState.Loading
             val currentUserId = prefs.currentUserId.first().toLongOrNull()
             if (currentUserId == null) {

@@ -23,7 +23,6 @@ import com.splitapp.viewmodel.SettingsViewModel
 fun SettingsScreen(vm: SettingsViewModel = viewModel()) {
     val savedApiKey by vm.apiKey.collectAsStateWithLifecycle(initialValue = "")
     val savedGeminiKey by vm.geminiApiKey.collectAsStateWithLifecycle(initialValue = "")
-    val monitoringEnabled by vm.monitoringEnabled.collectAsStateWithLifecycle(initialValue = true)
     val syncState by vm.syncState.collectAsStateWithLifecycle()
 
     var apiKeyInput by remember(savedApiKey) { mutableStateOf(savedApiKey) }
@@ -97,25 +96,6 @@ fun SettingsScreen(vm: SettingsViewModel = viewModel()) {
             enabled = geminiKeyInput.isNotBlank() && geminiKeyInput != savedGeminiKey,
             modifier = Modifier.fillMaxWidth()
         ) { Text("Save Gemini Key") }
-
-        HorizontalDivider()
-
-        // SMS Monitoring toggle
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text("SMS Monitoring", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "Auto-detect transaction SMS",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(checked = monitoringEnabled, onCheckedChange = { vm.setMonitoring(it) })
-        }
 
         HorizontalDivider()
 

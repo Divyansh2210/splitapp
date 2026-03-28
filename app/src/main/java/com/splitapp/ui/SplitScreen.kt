@@ -68,6 +68,7 @@ fun SplitScreen(
             is SplitUiState.Ready -> {
                 var showItemized by remember { mutableStateOf(false) }
                 var currentUserId by remember { mutableStateOf<Long?>(null) }
+                var pendingGroup by remember { mutableStateOf<Group?>(null) }
 
                 // Resolve current user ID once
                 LaunchedEffect(Unit) {
@@ -85,6 +86,7 @@ fun SplitScreen(
                         transaction = s.transaction,
                         currentUserId = currentUserId!!,
                         groupId = s.selectedGroupId,
+                        description = s.description,
                         onBack = {
                             vm.clearItemizedState()
                             showItemized = false
@@ -102,7 +104,13 @@ fun SplitScreen(
                         description = s.description,
                         pinnedFriendIds = s.pinnedFriendIds,
                         pinnedGroupIds = s.pinnedGroupIds,
-                        onToggleGroup = { g -> vm.toggleGroup(g, s.transaction, s) },
+                        onToggleGroup = { g ->
+                            if (s.selectedGroupId == g.id || !vm.hasManualSplits(s)) {
+                                vm.toggleGroup(g, s.transaction, s)
+                            } else {
+                                pendingGroup = g
+                            }
+                        },
                         onToggleFriend = { f -> vm.toggleFriend(f, s.transaction, s.selectedSplits) },
                         onUpdateRatio = { fId, r -> vm.updateRatio(fId, r, s.transaction, s.selectedSplits) },
                         onEqualSplit = { vm.applyEqualSplit(s.transaction, s.selectedSplits) },
@@ -115,6 +123,26 @@ fun SplitScreen(
                         onDescriptionChange = { vm.updateDescription(it) },
                         onTogglePinFriend = { vm.togglePinFriend(it) },
                         onTogglePinGroup = { vm.togglePinGroup(it) }
+                    )
+                }
+
+                // Confirmation dialog when group selection would replace manual splits
+                pendingGroup?.let { group ->
+                    AlertDialog(
+                        onDismissRequest = { pendingGroup = null },
+                        title = { Text("Replace current splits?") },
+                        text = {
+                            Text("Selecting \"${group.name}\" will replace your current friend selections with the group's members.")
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                vm.applyGroupSelection(group, s.transaction, s)
+                                pendingGroup = null
+                            }) { Text("Replace") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { pendingGroup = null }) { Text("Cancel") }
+                        }
                     )
                 }
             }
