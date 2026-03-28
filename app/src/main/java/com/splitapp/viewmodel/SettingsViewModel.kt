@@ -22,6 +22,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = SplitwiseRepository(prefs)
 
     val apiKey = prefs.apiKey
+    val geminiApiKey = prefs.geminiApiKey
     val monitoringEnabled = prefs.monitoringEnabled
 
     private val _syncState = MutableStateFlow<SettingsUiState>(SettingsUiState.Idle)
@@ -29,6 +30,10 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     fun saveApiKey(key: String) {
         viewModelScope.launch { prefs.setApiKey(key) }
+    }
+
+    fun saveGeminiApiKey(key: String) {
+        viewModelScope.launch { prefs.setGeminiApiKey(key) }
     }
 
     fun setMonitoring(enabled: Boolean) {

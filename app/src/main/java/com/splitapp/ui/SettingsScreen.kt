@@ -22,11 +22,14 @@ import com.splitapp.viewmodel.SettingsViewModel
 @Composable
 fun SettingsScreen(vm: SettingsViewModel = viewModel()) {
     val savedApiKey by vm.apiKey.collectAsStateWithLifecycle(initialValue = "")
+    val savedGeminiKey by vm.geminiApiKey.collectAsStateWithLifecycle(initialValue = "")
     val monitoringEnabled by vm.monitoringEnabled.collectAsStateWithLifecycle(initialValue = true)
     val syncState by vm.syncState.collectAsStateWithLifecycle()
 
     var apiKeyInput by remember(savedApiKey) { mutableStateOf(savedApiKey) }
     var showKey by remember { mutableStateOf(false) }
+    var geminiKeyInput by remember(savedGeminiKey) { mutableStateOf(savedGeminiKey) }
+    var showGeminiKey by remember { mutableStateOf(false) }
 
     Column(
         Modifier
@@ -61,6 +64,39 @@ fun SettingsScreen(vm: SettingsViewModel = viewModel()) {
             enabled = apiKeyInput.isNotBlank() && apiKeyInput != savedApiKey,
             modifier = Modifier.fillMaxWidth()
         ) { Text("Save API Key") }
+
+        HorizontalDivider()
+
+        // Gemini API Key
+        Text("Gemini API Key", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "For receipt scanning (itemized split)",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        OutlinedTextField(
+            value = geminiKeyInput,
+            onValueChange = { geminiKeyInput = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("API Key") },
+            visualTransformation = if (showGeminiKey) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = {
+                IconButton(onClick = { showGeminiKey = !showGeminiKey }) {
+                    val icon: ImageVector = if (showGeminiKey) Icons.Default.VisibilityOff else Icons.Default.Visibility
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = if (showGeminiKey) "Hide" else "Show"
+                    )
+                }
+            },
+            singleLine = true
+        )
+        Button(
+            onClick = { vm.saveGeminiApiKey(geminiKeyInput) },
+            enabled = geminiKeyInput.isNotBlank() && geminiKeyInput != savedGeminiKey,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Save Gemini Key") }
 
         HorizontalDivider()
 
