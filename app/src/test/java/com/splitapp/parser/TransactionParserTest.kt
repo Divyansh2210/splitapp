@@ -435,7 +435,49 @@ class TransactionParserTest {
     }
 
     // =========================================================================
-    // 11. Multi-part SMS (body already concatenated by BroadcastReceiver)
+    // 11. OTP / security SMS rejection
+    // =========================================================================
+
+    @Test
+    fun `OTP SMS with debit keyword is rejected`() {
+        assertNull(TransactionParser.parse("AD-HSBCIN",
+            "OTP for debit of INR 500.00 from your account is 483921. Do not share with anyone."))
+    }
+
+    @Test
+    fun `one time password SMS is rejected`() {
+        assertNull(TransactionParser.parse("AD-SBIINB",
+            "Your One Time Password for Rs 1000 payment is 582910. Valid for 5 min."))
+    }
+
+    @Test
+    fun `verification code SMS is rejected`() {
+        assertNull(TransactionParser.parse("AD-ICICIB",
+            "Verification code 839201 for INR 2500.00 debited to Amazon. Do not share."))
+    }
+
+    @Test
+    fun `secure code SMS is rejected`() {
+        assertNull(TransactionParser.parse("AD-HSBCIN",
+            "Your secure code for Rs.750 payment at Flipkart is 192830."))
+    }
+
+    @Test
+    fun `security code SMS is rejected`() {
+        assertNull(TransactionParser.parse("AD-SBIINB",
+            "Security code: 491023. INR 300.00 debited for online purchase."))
+    }
+
+    @Test
+    fun `normal transaction without OTP keywords still parses`() {
+        val result = TransactionParser.parse("AD-HSBCIN",
+            "INR 500.00 debited from your account at AMAZON on 28-Mar-26")
+        assertNotNull(result)
+        assertEquals(500.0, result!!.amount, 0.001)
+    }
+
+    // =========================================================================
+    // 12. Multi-part SMS (body already concatenated by BroadcastReceiver)
     // =========================================================================
 
     @Test
@@ -453,25 +495,10 @@ class TransactionParserTest {
     // =========================================================================
 
     @Test
-    fun `parsed transaction has correct rawSms field`() {
-        val smsBody = "INR 500.00 debited at AMAZON on 01/01/26"
-        val result = TransactionParser.parse("AD-HSBCIN", smsBody)
-        assertNotNull(result)
-        assertEquals(smsBody, result!!.rawSms)
-    }
-
-    @Test
     fun `parsed transaction has non-zero timestamp`() {
         val result = TransactionParser.parse("AD-HSBCIN", "INR 100.00 debited at SHOP")
         assertNotNull(result)
         assertTrue(result!!.timestamp > 0)
-    }
-
-    @Test
-    fun `parsed transaction has PENDING status by default`() {
-        val result = TransactionParser.parse("AD-HSBCIN", "INR 100.00 debited at SHOP")
-        assertNotNull(result)
-        assertEquals(com.splitapp.model.TransactionStatus.PENDING, result!!.status)
     }
 
     // =========================================================================

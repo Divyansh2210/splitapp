@@ -36,38 +36,13 @@ class ModelTest {
     // =========================================================================
 
     @Test
-    fun `transaction default status is PENDING`() {
-        val tx = Transaction(
-            amount = 100.0,
-            description = "Test",
-            rawSms = "test sms",
-            timestamp = System.currentTimeMillis()
-        )
-        assertEquals(TransactionStatus.PENDING, tx.status)
-    }
-
-    @Test
     fun `transaction default id is 0`() {
         val tx = Transaction(
             amount = 50.0,
             description = "Test",
-            rawSms = "test",
             timestamp = 1000L
         )
         assertEquals(0L, tx.id)
-    }
-
-    // =========================================================================
-    // TransactionStatus enum
-    // =========================================================================
-
-    @Test
-    fun `all expected statuses exist`() {
-        val statuses = TransactionStatus.values()
-        assertEquals(3, statuses.size)
-        assertTrue(statuses.contains(TransactionStatus.PENDING))
-        assertTrue(statuses.contains(TransactionStatus.DONE))
-        assertTrue(statuses.contains(TransactionStatus.SKIPPED))
     }
 
     // =========================================================================

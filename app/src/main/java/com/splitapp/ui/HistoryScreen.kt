@@ -14,7 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.splitapp.model.Transaction
-import com.splitapp.model.TransactionStatus
 import com.splitapp.viewmodel.HistoryViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -37,7 +36,7 @@ fun HistoryScreen(
         ) {
             items(transactions, key = { it.id }) { tx ->
                 TransactionCard(tx, onClick = {
-                    if (tx.status == TransactionStatus.PENDING) onTransactionClick(tx.id)
+                    onTransactionClick(tx.id)
                 })
             }
         }
@@ -47,13 +46,8 @@ fun HistoryScreen(
 @Composable
 private fun TransactionCard(transaction: Transaction, onClick: () -> Unit) {
     val df = remember { SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()) }
-    val statusColor = when (transaction.status) {
-        TransactionStatus.PENDING -> MaterialTheme.colorScheme.primary
-        TransactionStatus.DONE -> MaterialTheme.colorScheme.tertiary
-        TransactionStatus.SKIPPED -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
     Card(
-        Modifier.fillMaxWidth().clickable(enabled = transaction.status == TransactionStatus.PENDING, onClick = onClick)
+        Modifier.fillMaxWidth().clickable(onClick = onClick)
     ) {
         Row(
             Modifier.padding(16.dp).fillMaxWidth(),
@@ -68,17 +62,10 @@ private fun TransactionCard(transaction: Transaction, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    "₹%.2f".format(transaction.amount),
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    transaction.status.name,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = statusColor
-                )
-            }
+            Text(
+                "₹%.2f".format(transaction.amount),
+                style = MaterialTheme.typography.titleMedium
+            )
         }
     }
 }

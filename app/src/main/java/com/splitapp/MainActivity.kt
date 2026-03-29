@@ -33,7 +33,6 @@ class MainActivity : ComponentActivity() {
         // Request permissions on first launch
         val perms = buildList {
             add(Manifest.permission.RECEIVE_SMS)
-            add(Manifest.permission.READ_SMS)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.POST_NOTIFICATIONS)
             }

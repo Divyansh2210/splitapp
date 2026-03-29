@@ -16,7 +16,7 @@ class SplitApplication : Application() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "splitapp.db"
-                ).build().also { db = it }
+                ).fallbackToDestructiveMigration().build().also { db = it }
             }
         }
     }

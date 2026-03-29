@@ -153,18 +153,22 @@ class SplitwiseRepositoryTest {
         fields["split_equally"] = "false"
         groupId?.let { fields["group_id"] = it.toString() }
 
-        val friendsTotal = splits.sumOf { it.second }
-        val yourOwed = totalAmount - friendsTotal
+        // Format each friend's share, then derive payer's share so the total is exact
+        val formattedSplits = splits.map { (friendId, owedAmount) ->
+            Triple(friendId, "0.00", "%.2f".format(owedAmount))
+        }
+        val friendsTotal = formattedSplits.sumOf { it.third.toDouble() }
+        val yourOwed = "%.2f".format(totalAmount - friendsTotal)
 
         fields["users__0__user_id"] = currentUserId.toString()
         fields["users__0__paid_share"] = "%.2f".format(totalAmount)
-        fields["users__0__owed_share"] = "%.2f".format(yourOwed)
+        fields["users__0__owed_share"] = yourOwed
 
-        splits.forEachIndexed { index, (friendId, owedAmount) ->
+        formattedSplits.forEachIndexed { index, (friendId, paidShare, owedShare) ->
             val i = index + 1
             fields["users__${i}__user_id"] = friendId.toString()
-            fields["users__${i}__paid_share"] = "0.00"
-            fields["users__${i}__owed_share"] = "%.2f".format(owedAmount)
+            fields["users__${i}__paid_share"] = paidShare
+            fields["users__${i}__owed_share"] = owedShare
         }
         return fields
     }

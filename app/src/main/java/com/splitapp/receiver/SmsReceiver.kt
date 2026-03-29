@@ -32,19 +32,26 @@ class SmsReceiver : BroadcastReceiver() {
         val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
         if (messages.isNullOrEmpty()) return
 
+        // Keep the process alive while the coroutine runs
+        val pendingResult = goAsync()
+
         // Group multi-part SMS by sender
         val grouped = messages.groupBy { it.originatingAddress ?: "" }
 
         val db = SplitApplication.database(context)
 
         CoroutineScope(Dispatchers.IO).launch {
-            for ((sender, parts) in grouped) {
-                val body = parts.joinToString("") { it.messageBody }
-                val transaction = TransactionParser.parse(sender, body) ?: continue
+            try {
+                for ((sender, parts) in grouped) {
+                    val body = parts.joinToString("") { it.messageBody }
+                    val transaction = TransactionParser.parse(sender, body) ?: continue
 
-                val id = db.transactionDao().insert(transaction)
+                    val id = db.transactionDao().insert(transaction)
 
-                showNotification(context, id, transaction.amount, transaction.description)
+                    showNotification(context, id, transaction.amount, transaction.description)
+                }
+            } finally {
+                pendingResult.finish()
             }
         }
     }

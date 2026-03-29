@@ -30,6 +30,12 @@ object TransactionParser {
         RegexOption.IGNORE_CASE
     )
 
+    // OTP / security message keywords — reject these even if they contain debit keywords
+    private val OTP_PATTERN = Regex(
+        """\b(?:OTP|O\.T\.P|one\s*time\s*password|verification\s*code|secure\s*code|security\s*code)\b""",
+        RegexOption.IGNORE_CASE
+    )
+
     // UPI ID or merchant name after common markers
     private val UPI_ID_PATTERN = Regex(
         """(?:VPA[:\s]*|UPI[:\s]+|to\s+)([a-zA-Z0-9.\-_]+@[a-zA-Z0-9]+)""",
@@ -56,6 +62,9 @@ object TransactionParser {
         // Must be a debit
         if (!DEBIT_PATTERN.containsMatchIn(body)) return null
 
+        // Reject OTP / security messages
+        if (OTP_PATTERN.containsMatchIn(body)) return null
+
         // Extract amount
         val amountMatch = AMOUNT_PATTERN.find(body) ?: return null
         val amount = amountMatch.groupValues[1].replace(",", "").toDoubleOrNull() ?: return null
@@ -70,7 +79,6 @@ object TransactionParser {
         return Transaction(
             amount = amount,
             description = description,
-            rawSms = body,
             timestamp = System.currentTimeMillis()
         )
     }

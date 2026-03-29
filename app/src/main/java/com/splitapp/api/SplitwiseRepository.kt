@@ -2,6 +2,7 @@ package com.splitapp.api
 
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.splitapp.BuildConfig
 import com.splitapp.data.PreferencesStore
 import com.splitapp.model.Friend
 import com.splitapp.model.Group
@@ -16,7 +17,10 @@ class SplitwiseRepository(private val prefs: PreferencesStore) {
     private val gson = Gson()
 
     private val api: SplitwiseApi by lazy {
-        val logging = HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY }
+        val logging = HttpLoggingInterceptor().apply {
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC
+                    else HttpLoggingInterceptor.Level.NONE
+        }
         val client = OkHttpClient.Builder().addInterceptor(logging).build()
         Retrofit.Builder()
             .baseUrl("https://secure.splitwise.com/")
@@ -120,19 +124,22 @@ class SplitwiseRepository(private val prefs: PreferencesStore) {
         fields["split_equally"] = "false"
         groupId?.let { fields["group_id"] = it.toString() }
 
-        // Your share = total - sum of what friends owe
-        val friendsTotal = splits.sumOf { it.second }
-        val yourOwed = totalAmount - friendsTotal
+        // Format each friend's share, then derive payer's share so the total is exact
+        val formattedSplits = splits.map { (friendId, owedAmount) ->
+            Triple(friendId, "0.00", "%.2f".format(owedAmount))
+        }
+        val friendsTotal = formattedSplits.sumOf { it.third.toDouble() }
+        val yourOwed = "%.2f".format(totalAmount - friendsTotal)
 
         fields["users__0__user_id"] = currentUserId.toString()
         fields["users__0__paid_share"] = "%.2f".format(totalAmount)
-        fields["users__0__owed_share"] = "%.2f".format(yourOwed)
+        fields["users__0__owed_share"] = yourOwed
 
-        splits.forEachIndexed { index, (friendId, owedAmount) ->
+        formattedSplits.forEachIndexed { index, (friendId, paidShare, owedShare) ->
             val i = index + 1
             fields["users__${i}__user_id"] = friendId.toString()
-            fields["users__${i}__paid_share"] = "0.00"
-            fields["users__${i}__owed_share"] = "%.2f".format(owedAmount)
+            fields["users__${i}__paid_share"] = paidShare
+            fields["users__${i}__owed_share"] = owedShare
         }
 
         val response = api.createExpense(bearerToken(), fields)
