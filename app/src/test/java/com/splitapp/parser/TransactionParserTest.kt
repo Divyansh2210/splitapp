@@ -532,4 +532,5 @@ class TransactionParserTest {
     fun `FEDERAL sender ID accepted`() {
         assertNotNull(TransactionParser.parse("AD-FEDERAL", "INR 100.00 debited at SHOP"))
     }
+
 }
