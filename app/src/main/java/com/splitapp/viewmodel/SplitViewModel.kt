@@ -34,6 +34,7 @@ sealed class SplitUiState {
         val selectedSplits: List<FriendSplit>,
         val selectedGroupId: Long? = null,
         val description: String = "",
+        val amount: Double = 0.0,
         val pinnedFriendIds: Set<Long> = emptySet(),
         val pinnedGroupIds: Set<Long> = emptySet()
     ) : SplitUiState()
@@ -78,6 +79,7 @@ class SplitViewModel(application: Application) : AndroidViewModel(application) {
                 groups = groups,
                 selectedSplits = emptyList(),
                 description = transaction.description,
+                amount = transaction.amount,
                 pinnedFriendIds = pinnedFriends,
                 pinnedGroupIds = pinnedGroups
             )
@@ -139,6 +141,11 @@ class SplitViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = s.copy(description = description)
     }
 
+    fun updateAmount(amount: Double) {
+        val s = uiState.value as? SplitUiState.Ready ?: return
+        _uiState.value = s.copy(amount = amount)
+    }
+
     fun togglePinFriend(friendId: Long) {
         val s = uiState.value as? SplitUiState.Ready ?: return
         val newPins = if (friendId in s.pinnedFriendIds) {
@@ -161,7 +168,7 @@ class SplitViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { prefs.setPinnedGroupIds(newPins) }
     }
 
-    fun submitSplit(transaction: Transaction, splits: List<FriendSplit>, groupId: Long?, description: String) {
+    fun submitSplit(transaction: Transaction, splits: List<FriendSplit>, groupId: Long?, description: String, amount: Double) {
         viewModelScope.launch {
             _uiState.value = SplitUiState.Loading
             val currentUserId = prefs.currentUserId.first().toLongOrNull()
@@ -171,13 +178,13 @@ class SplitViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             val splitAmounts = splits.map { fs ->
-                val amount = BigDecimal(transaction.amount * fs.ratio / 100.0)
+                val splitAmount = BigDecimal(amount * fs.ratio / 100.0)
                     .setScale(2, RoundingMode.HALF_UP).toDouble()
-                Pair(fs.friend.id, amount)
+                Pair(fs.friend.id, splitAmount)
             }
 
             repo.createExpense(
-                totalAmount = transaction.amount,
+                totalAmount = amount,
                 description = description,
                 currentUserId = currentUserId,
                 splits = splitAmounts,
