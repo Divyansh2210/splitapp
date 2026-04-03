@@ -9,15 +9,25 @@ Android app that automatically detects bank SMS transactions and lets you split 
 3. Tap notification to select friends or a group, adjust splits, and submit to Splitwise
 4. For groceries: scan a receipt screenshot with Gemini AI, assign items to participants, submit per-person totals
 
-## Features
+## What it does
 
-- **Automatic SMS detection** with OTP filtering (OTPs are never captured or stored)
-- **Split by percentage or absolute amount** with a per-friend toggle
-- **Editable transaction amount and title** (pre-filled from SMS)
-- **Group support** — select a Splitwise group to auto-populate members
-- **Itemized splitting** — scan receipt screenshots with Gemini VLM, assign items via checkboxes
-- **Pin friends/groups** for quick access
-- **Privacy-first** — no raw SMS stored, transactions deleted after submit/skip
+- Automatically detects bank debit SMS and shows a notification
+- Filters out OTP/security messages — they are never captured or stored
+- Splits expenses by percentage or absolute rupee amount (per-friend toggle)
+- Lets you edit the transaction amount and title before submitting
+- Supports Splitwise groups — select a group to auto-populate members
+- Itemized splitting — scan a receipt screenshot with Gemini AI, assign items to participants via checkboxes
+- Pin frequently used friends and groups for quick access
+- Privacy-first — no raw SMS body stored, transactions deleted from device after submit/skip
+
+## What it doesn't do
+
+- No manual transaction entry — if the SMS isn't detected, there's no way to add it manually. Use Splitwise directly for those
+- No transaction history — submitted and skipped transactions are deleted immediately, not kept as a log
+- No credit transaction detection — only debit keywords (debited, spent, paid, etc.) are recognized
+- No multi-currency splits — amounts are parsed in multiple currencies but splits are always in the original currency
+- No offline support — requires internet to submit to Splitwise and scan receipts
+- No support for banks beyond HSBC, SBI, BOB, Federal Bank, and ICICI sender IDs
 
 ## Building
 
