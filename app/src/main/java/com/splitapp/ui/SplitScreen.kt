@@ -97,6 +97,7 @@ fun SplitScreen(
                     SplitContent(
                         modifier = Modifier.padding(padding),
                         transaction = s.transaction,
+                        amount = s.amount,
                         friends = s.friends,
                         groups = s.groups,
                         selectedSplits = s.selectedSplits,
@@ -114,12 +115,13 @@ fun SplitScreen(
                         onToggleFriend = { f -> vm.toggleFriend(f, s.transaction, s.selectedSplits) },
                         onUpdateRatio = { fId, r -> vm.updateRatio(fId, r, s.transaction, s.selectedSplits) },
                         onEqualSplit = { vm.applyEqualSplit(s.transaction, s.selectedSplits) },
-                        onSubmit = { vm.submitSplit(s.transaction, s.selectedSplits, s.selectedGroupId, s.description) },
+                        onSubmit = { vm.submitSplit(s.transaction, s.selectedSplits, s.selectedGroupId, s.description, s.amount) },
                         onSkip = { vm.skipTransaction(s.transaction.id); onDone() },
                         onItemizedSplit = {
                             if (s.selectedSplits.isNotEmpty()) showItemized = true
                         },
                         hasSelectedFriends = s.selectedSplits.isNotEmpty(),
+                        onAmountChange = { vm.updateAmount(it) },
                         onDescriptionChange = { vm.updateDescription(it) },
                         onTogglePinFriend = { vm.togglePinFriend(it) },
                         onTogglePinGroup = { vm.togglePinGroup(it) }
@@ -156,6 +158,7 @@ fun SplitScreen(
 private fun SplitContent(
     modifier: Modifier,
     transaction: Transaction,
+    amount: Double,
     friends: List<Friend>,
     groups: List<Group>,
     selectedSplits: List<FriendSplit>,
@@ -171,6 +174,7 @@ private fun SplitContent(
     onSkip: () -> Unit,
     onItemizedSplit: () -> Unit = {},
     hasSelectedFriends: Boolean = false,
+    onAmountChange: (Double) -> Unit = {},
     onDescriptionChange: (String) -> Unit = {},
     onTogglePinFriend: (Long) -> Unit = {},
     onTogglePinGroup: (Long) -> Unit = {}
@@ -212,15 +216,25 @@ private fun SplitContent(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(vertical = 16.dp)
     ) {
-        // Transaction card with editable title
+        // Transaction card with editable title and amount
         item {
+            var amountText by remember(amount) { mutableStateOf("%.2f".format(amount)) }
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Transaction", style = MaterialTheme.typography.labelMedium)
-                    Text(
-                        "₹%.2f".format(transaction.amount),
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.primary
+                    OutlinedTextField(
+                        value = amountText,
+                        onValueChange = { v ->
+                            amountText = v
+                            v.toDoubleOrNull()?.let { onAmountChange(it) }
+                        },
+                        label = { Text("Amount ₹") },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.headlineMedium.copy(
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     )
                     OutlinedTextField(
                         value = description,
@@ -246,7 +260,7 @@ private fun SplitContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "Your share: ₹%.2f".format(transaction.amount * (100f - totalRatio) / 100f),
+                    "Your share: ₹%.2f".format(amount * (100f - totalRatio) / 100f),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 OutlinedButton(onClick = onEqualSplit, enabled = selectedSplits.isNotEmpty()) {
@@ -354,7 +368,7 @@ private fun SplitContent(
             FriendRow(
                 friend = friend,
                 split = split,
-                totalAmount = transaction.amount,
+                totalAmount = amount,
                 isPinned = friend.id in pinnedFriendIds,
                 onToggle = { onToggleFriend(friend) },
                 onRatioChange = { r -> onUpdateRatio(friend.id, r) },
@@ -428,24 +442,40 @@ private fun FriendRow(
 
             if (isSelected && split != null) {
                 Spacer(Modifier.height(8.dp))
+                var isAmountMode by remember { mutableStateOf(false) }
                 var ratioText by remember(split.ratio) { mutableStateOf("%.1f".format(split.ratio)) }
+                var amountText by remember(split.ratio) {
+                    mutableStateOf("%.2f".format(totalAmount * split.ratio / 100.0))
+                }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedTextField(
-                        value = ratioText,
+                        value = if (isAmountMode) amountText else ratioText,
                         onValueChange = { v ->
-                            ratioText = v
-                            v.toFloatOrNull()?.let { onRatioChange(it) }
+                            if (isAmountMode) {
+                                amountText = v
+                                v.toDoubleOrNull()?.let { amt ->
+                                    val newRatio = if (totalAmount > 0) (amt / totalAmount * 100).toFloat() else 0f
+                                    onRatioChange(newRatio)
+                                }
+                            } else {
+                                ratioText = v
+                                v.toFloatOrNull()?.let { onRatioChange(it) }
+                            }
                         },
-                        label = { Text("Ratio %") },
+                        label = { Text(if (isAmountMode) "Amount ₹" else "Ratio %") },
                         modifier = Modifier.width(100.dp),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true
                     )
+                    TextButton(onClick = { isAmountMode = !isAmountMode }) {
+                        Text(if (isAmountMode) "%" else "₹")
+                    }
                     Text(
-                        "= ₹%.2f".format(totalAmount * split.ratio / 100.0),
+                        if (isAmountMode) "= %.1f%%".format(split.ratio)
+                        else "= ₹%.2f".format(totalAmount * split.ratio / 100.0),
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }

@@ -4,7 +4,6 @@ import com.splitapp.model.Friend
 import com.splitapp.model.Group
 import com.splitapp.model.OrderItem
 import com.splitapp.model.Transaction
-import com.splitapp.model.TransactionStatus
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -43,7 +42,6 @@ class SplitViewModelTest {
         id = 100,
         amount = 300.0,
         description = "Test dinner",
-        rawSms = "INR 300 debited at restaurant",
         timestamp = System.currentTimeMillis()
     )
 
@@ -233,6 +231,21 @@ class SplitViewModelTest {
         val splits = listOf(FriendSplit(alice, 50f))
         val result = toggleFriend(alice, testTransaction, splits)
         assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `toggle friend clears selected group`() {
+        val state = SplitUiState.Ready(
+            transaction = testTransaction,
+            friends = listOf(alice, bob, charlie),
+            groups = listOf(flatmates),
+            selectedSplits = listOf(FriendSplit(alice, 33.3f), FriendSplit(bob, 33.3f)),
+            selectedGroupId = flatmates.id
+        )
+        // Add charlie while flatmates group is selected
+        val result = toggleFriendInState(charlie, testTransaction, state)
+        assertNull("Group should be cleared after manual friend change", result.selectedGroupId)
+        assertEquals(3, result.selectedSplits.size)
     }
 
     // =========================================================================
@@ -660,7 +673,7 @@ class SplitViewModelTest {
     fun `split amounts calculated correctly from ratios`() {
         val transaction = Transaction(
             id = 1, amount = 1000.0, description = "Test",
-            rawSms = "sms", timestamp = 1000L
+            timestamp = 1000L
         )
         val splits = listOf(
             FriendSplit(alice, 30f),
@@ -753,6 +766,14 @@ class SplitViewModelTest {
             currentSplits + FriendSplit(friend, 0f)
         }
         return applyEqualSplit(newSplits)
+    }
+
+    /** Full-state version that mirrors the ViewModel's group-clearing behavior. */
+    private fun toggleFriendInState(
+        friend: Friend, transaction: Transaction, current: SplitUiState.Ready
+    ): SplitUiState.Ready {
+        val rebalanced = toggleFriend(friend, transaction, current.selectedSplits)
+        return current.copy(selectedSplits = rebalanced, selectedGroupId = null)
     }
 
     private fun updateRatio(

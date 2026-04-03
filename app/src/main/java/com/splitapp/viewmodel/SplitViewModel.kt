@@ -13,7 +13,6 @@ import com.splitapp.model.Friend
 import com.splitapp.model.Group
 import com.splitapp.model.OrderItem
 import com.splitapp.model.Transaction
-import com.splitapp.model.TransactionStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -35,6 +34,7 @@ sealed class SplitUiState {
         val selectedSplits: List<FriendSplit>,
         val selectedGroupId: Long? = null,
         val description: String = "",
+        val amount: Double = 0.0,
         val pinnedFriendIds: Set<Long> = emptySet(),
         val pinnedGroupIds: Set<Long> = emptySet()
     ) : SplitUiState()
@@ -79,6 +79,7 @@ class SplitViewModel(application: Application) : AndroidViewModel(application) {
                 groups = groups,
                 selectedSplits = emptyList(),
                 description = transaction.description,
+                amount = transaction.amount,
                 pinnedFriendIds = pinnedFriends,
                 pinnedGroupIds = pinnedGroups
             )
@@ -117,7 +118,8 @@ class SplitViewModel(application: Application) : AndroidViewModel(application) {
         }
         val rebalanced = equalSplit(newSplits, transaction.amount)
         val s = uiState.value as SplitUiState.Ready
-        _uiState.value = s.copy(selectedSplits = rebalanced)
+        // Clear group selection — participants no longer match the group
+        _uiState.value = s.copy(selectedSplits = rebalanced, selectedGroupId = null)
     }
 
     fun updateRatio(friendId: Long, ratio: Float, transaction: Transaction, currentSplits: List<FriendSplit>) {
@@ -137,6 +139,11 @@ class SplitViewModel(application: Application) : AndroidViewModel(application) {
     fun updateDescription(description: String) {
         val s = uiState.value as? SplitUiState.Ready ?: return
         _uiState.value = s.copy(description = description)
+    }
+
+    fun updateAmount(amount: Double) {
+        val s = uiState.value as? SplitUiState.Ready ?: return
+        _uiState.value = s.copy(amount = amount)
     }
 
     fun togglePinFriend(friendId: Long) {
@@ -161,7 +168,7 @@ class SplitViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { prefs.setPinnedGroupIds(newPins) }
     }
 
-    fun submitSplit(transaction: Transaction, splits: List<FriendSplit>, groupId: Long?, description: String) {
+    fun submitSplit(transaction: Transaction, splits: List<FriendSplit>, groupId: Long?, description: String, amount: Double) {
         viewModelScope.launch {
             _uiState.value = SplitUiState.Loading
             val currentUserId = prefs.currentUserId.first().toLongOrNull()
@@ -171,18 +178,19 @@ class SplitViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             val splitAmounts = splits.map { fs ->
-                val amount = transaction.amount * fs.ratio / 100.0
-                Pair(fs.friend.id, amount)
+                val splitAmount = BigDecimal(amount * fs.ratio / 100.0)
+                    .setScale(2, RoundingMode.HALF_UP).toDouble()
+                Pair(fs.friend.id, splitAmount)
             }
 
             repo.createExpense(
-                totalAmount = transaction.amount,
+                totalAmount = amount,
                 description = description,
                 currentUserId = currentUserId,
                 splits = splitAmounts,
                 groupId = groupId
             ).onSuccess {
-                db.transactionDao().updateStatus(transaction.id, TransactionStatus.DONE)
+                db.transactionDao().delete(transaction.id)
                 _uiState.value = SplitUiState.Success
             }.onFailure {
                 _uiState.value = SplitUiState.Error(it.message ?: "Unknown error")
@@ -192,7 +200,7 @@ class SplitViewModel(application: Application) : AndroidViewModel(application) {
 
     fun skipTransaction(transactionId: Long) {
         viewModelScope.launch {
-            db.transactionDao().updateStatus(transactionId, TransactionStatus.SKIPPED)
+            db.transactionDao().delete(transactionId)
         }
     }
 
@@ -366,7 +374,7 @@ class SplitViewModel(application: Application) : AndroidViewModel(application) {
                 splits = friendSplits,
                 groupId = groupId
             ).onSuccess {
-                db.transactionDao().updateStatus(transaction.id, TransactionStatus.DONE)
+                db.transactionDao().delete(transaction.id)
                 _itemizedState.value = ItemizedUiState.Idle
                 _uiState.value = SplitUiState.Success
             }.onFailure {
