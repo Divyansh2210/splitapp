@@ -4,9 +4,9 @@ Android app that automatically detects bank SMS transactions, shows push notific
 
 ## Core User Flow
 
-1. Bank SMS arrives → `SmsReceiver` intercepts → `TransactionParser` extracts amount/merchant → saved to Room DB → push notification shown
+1. Bank SMS arrives → `SmsReceiver` intercepts (with `goAsync()`) → `TransactionParser` extracts amount/merchant (rejects OTPs) → saved to Room DB → push notification shown
 2. User taps notification → `SplitActivity` opens → `SplitScreen` loads transaction with friends/groups from Splitwise
-3. User selects friends (or a group), adjusts ratios, edits title if needed → submits to Splitwise API
+3. User selects friends (or a group), adjusts ratios (by % or ₹ amount), edits title/amount if needed → submits to Splitwise API
 4. For grocery orders: user enters **itemized split mode** → scans receipt screenshot with Gemini VLM → assigns items to participants via multi-select checkboxes → submits per-person totals to Splitwise
 
 ## Architecture
@@ -21,8 +21,8 @@ Android app that automatically detects bank SMS transactions, shows push notific
 
 ```
 com.splitapp/
-├── model/          Transaction, Friend, Group, OrderItem, TransactionStatus
-├── data/           AppDatabase, TransactionDao, PreferencesStore, Converters
+├── model/          Transaction, Friend, Group, OrderItem
+├── data/           AppDatabase, TransactionDao, PreferencesStore
 ├── api/            SplitwiseApi, SplitwiseRepository, GeminiApi, GeminiReceiptExtractor
 ├── parser/         TransactionParser (regex-based SMS parsing)
 ├── receiver/       SmsReceiver (BroadcastReceiver)
@@ -38,18 +38,23 @@ com.splitapp/
 ### TransactionParser
 - Pre-filters by sender ID: HSBC, SBI, BOB, Federal Bank, ICICI (and their variants)
 - Detects debit keywords: debited, spent, paid, payment, withdrawn, purchase, used, charged
+- **OTP rejection**: Rejects SMS containing OTP, O.T.P, One Time Password, verification code, secure code, security code — prevents sensitive codes from being stored
 - Extracts amounts with currencies: Rs, INR, ₹, SGD, USD, EUR, GBP, AED
 - Description priority: UPI ID (`VPA`/`UPI` markers) → `at/to/for MERCHANT` → `on MERCHANT` (uppercase) → "Transaction"
 - MERCHANT_PATTERN has a **negative lookahead** to skip currency codes after `at/to/for` (prevents capturing "INR 500" as merchant name)
 - UPI_ID_PATTERN uses `VPA[:\s]*` to handle "VPA merchant@ybl" (space after VPA)
+- **No raw SMS stored**: Only extracted `amount`, `description`, and `timestamp` are persisted — the raw SMS body is never saved to the database
 
 ### SplitViewModel
 - **Main split**: Load transaction + friends/groups → select friends or group → set ratios (equal or custom) → submit
 - **Itemized split**: Init participants → scan receipt via Gemini VLM → assign items to participant subsets via checkboxes → compute per-person totals → submit
 - `equalSplit()`: divides 100% by (friends + 1) to include current user
 - `submitItemizedSplit()` takes `description` as an explicit parameter (not read from state) to avoid race condition
+- `submitSplit()` takes `amount` from state (editable by user), not from `transaction.amount`
 - Pin state (friends/groups) persisted to DataStore as comma-separated IDs
 - `hasManualSplits()` detects when group selection would overwrite manual friend selections (triggers confirmation dialog in UI)
+- `toggleFriend()` clears `selectedGroupId` to prevent submitting a stale group with mismatched participants
+- Transactions are **deleted** on submit/skip (not status-updated) — only pending transactions exist in DB
 
 ### GeminiReceiptExtractor
 - Uses `gemini-3.1-flash-lite-preview` model via REST API
@@ -61,8 +66,10 @@ com.splitapp/
 ### SplitwiseRepository
 - Bearer token auth from stored API key
 - `createExpense()` builds form-encoded field map: user 0 = you (paid full amount), users 1..N = friends (paid 0, owe their share)
+- Payer's owed share is derived from formatted friend shares to ensure exact penny-level totals
 - `syncGroups()` filters out group id=0 ("Non-group expenses") and excludes current user from member lists
 - Friends/groups cached as JSON in DataStore
+- HTTP logging: `BASIC` level in debug builds, `NONE` in release (prevents bearer token leaks via logcat)
 
 ### ItemizedSplitScreen
 - Bucket assignment uses **multi-select checkboxes per participant** (not bitmask dropdown — that was replaced due to combinatorial explosion with many participants)
@@ -75,6 +82,8 @@ com.splitapp/
 - Searchable group chips with pin icons
 - Confirmation dialog when selecting a group would replace existing manual friend selections
 - Editable expense title (pre-filled from parsed SMS description)
+- **Editable amount** (pre-filled from SMS-parsed amount) — user can override for the split
+- Per-friend **₹/% toggle**: enter split as absolute rupee amount or percentage. Amount mode converts to ratio on the fly: `(amount / total * 100)`. Complementary value always shown
 - "Equal Split" button rebalances all selected friends
 - "Itemized Split" button (enabled only when friends are selected) enters itemized mode
 
@@ -88,7 +97,8 @@ com.splitapp/
 
 ## Permissions
 
-- `RECEIVE_SMS`, `READ_SMS` — core functionality (SMS interception)
+- `RECEIVE_SMS` — core functionality (SMS broadcast interception)
+- `READ_SMS` — required alongside `RECEIVE_SMS` on some devices/OEMs for broadcast delivery (app does NOT read the SMS inbox)
 - `INTERNET` — Splitwise API, Gemini API
 - `POST_NOTIFICATIONS` — transaction alerts
 - `CAMERA` — receipt photo capture for itemized split
@@ -100,25 +110,34 @@ com.splitapp/
 
 ## Testing
 
-194 unit tests in `app/src/test/` covering:
-- `TransactionParserTest` (50) — all banks, currencies, keywords, merchant extraction, rejection cases
-- `SplitViewModelTest` (45) — equal split math, group/friend toggle, ratio clamping, pin toggle, itemized mode (init, add/edit/delete, bucket assignment, per-person totals)
+189 unit tests in `app/src/test/` covering:
+- `TransactionParserTest` (55) — all banks, currencies, keywords, merchant extraction, rejection cases, OTP rejection
+- `SplitViewModelTest` (46) — equal split math, group/friend toggle, group-clearing on friend toggle, ratio clamping, pin toggle, itemized mode (init, add/edit/delete, bucket assignment, per-person totals)
 - `GeminiReceiptExtractorTest` (16) — JSON parsing, code fence stripping, real receipt formats, edge cases
 - `FriendSearchAndSortTest` (16) — search by name/email, pin-based sorting, group search
-- `ModelTest` (11) — Friend displayName, Transaction/OrderItem defaults, enum completeness
-- `SplitwiseRepositoryTest` (10) — expense field map construction, amount formatting
+- `SplitwiseRepositoryTest` (10) — expense field map construction, amount formatting, penny-residual handling
 - `SplitwiseApiModelsTest` (9) — JSON deserialization with @SerializedName
 - `SplitwiseGroupFilterTest` (9) — group id=0 filtering, current user exclusion, JSON round-trips
-- `ConvertersTest` (8) — Room TypeConverter for TransactionStatus
+- `ModelTest` (9) — Friend displayName, Transaction/OrderItem defaults
 - `MismatchDetectionTest` (8) — item total vs transaction amount mismatch logic
 - `GeminiApiModelsTest` (6) — Gemini request/response serialization (snake_case)
 - `ItemizedRoundingTest` (6) — BigDecimal rounding for split amounts
 
-Run tests: `./gradlew testDebugUnitTest` (requires generating gradle wrapper first if missing)
+Run tests: `./gradlew testDebugUnitTest`
 
 ## Build
 
 - Gradle version catalog at `gradle/libs.versions.toml`
-- No `gradlew` in repo — generate with `gradle wrapper` if needed
+- `gradlew` included in repo
 - JDK bundled with Android Studio at `/Applications/Android Studio.app/Contents/jbr/Contents/Home/`
 - Android SDK at `~/Library/Android/sdk`
+- `buildConfig = true` enabled in `build.gradle.kts` for `BuildConfig.DEBUG` access
+
+## Security
+
+- **OTP filtering**: SMS containing OTP/verification keywords are rejected before parsing
+- **No raw SMS storage**: Only extracted amount, description, and timestamp stored in Room DB
+- **Transaction lifecycle**: Transactions deleted from DB on submit/skip — no permanent history of SMS data
+- **API credentials**: HTTP logging set to `BASIC` (debug) / `NONE` (release) to prevent bearer token exposure in logcat
+- **READ_SMS**: Permission declared for broadcast delivery compatibility but app never reads the SMS inbox
+- **DB schema v2**: Destructive migration from v1 wipes any legacy raw SMS data on upgrade
