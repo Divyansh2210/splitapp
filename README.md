@@ -62,12 +62,14 @@ Requires:
 - **Network**: Retrofit 2 + OkHttp (Splitwise API, Gemini API)
 - **Min SDK**: 26, Target SDK: 35
 
-## Permissions
+## Privacy and data minimization
 
-| Permission | Purpose |
-|---|---|
-| `RECEIVE_SMS` | Intercept incoming bank SMS |
-| `READ_SMS` | Required on some devices for broadcast delivery |
-| `INTERNET` | Splitwise and Gemini API calls |
-| `POST_NOTIFICATIONS` | Transaction alerts |
-| `CAMERA` | Receipt photo capture |
+This app handles sensitive financial SMS, so it's built to capture and retain as little as possible:
+
+- **No raw SMS stored** — only the extracted amount, merchant name, and timestamp are saved. The original SMS body is discarded immediately after parsing
+- **OTP/security messages rejected** — SMS containing OTP, verification code, or security code keywords are filtered out before any processing. They are never stored or displayed
+- **Transactions are ephemeral** — once you submit or skip a transaction, it's deleted from the device. There is no transaction history or log
+- **No SMS inbox access** — the app listens for incoming SMS via broadcast only. It never reads your SMS inbox, even though `READ_SMS` is declared (required by some devices for broadcast delivery)
+- **No data sent to third parties** — transaction data is only sent to Splitwise (the service you're splitting with). Receipt images are sent to Google Gemini only when you explicitly scan a receipt
+- **API credentials protected** — HTTP logging is disabled in release builds to prevent bearer tokens from leaking via logcat
+- **Minimal permissions** — the app requests only what it needs: SMS reception, internet, notifications, and camera (optional, for receipts only)
