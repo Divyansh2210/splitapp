@@ -64,7 +64,7 @@ Requires:
 ./gradlew testDebugUnitTest
 ```
 
-189 unit tests covering SMS parsing, split math, rounding, API field construction, receipt extraction, and more.
+198 unit tests covering SMS parsing, split math, rounding, API field construction, receipt extraction, and more.
 
 ## Architecture
 

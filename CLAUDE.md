@@ -50,6 +50,7 @@ com.splitapp/
 - **Itemized split**: Init participants → scan receipt via Gemini VLM → assign items to participant subsets via checkboxes → compute per-person totals → submit
 - `equalSplit()`: divides 100% by (friends + 1) to include current user
 - `submitItemizedSplit()` takes `description` as an explicit parameter (not read from state) to avoid race condition
+- `buildItemizedDetails()` generates a human-readable breakdown (items with prices/assignees + per-person totals) sent as Splitwise expense notes
 - `submitSplit()` takes `amount` from state (editable by user), not from `transaction.amount`
 - Pin state (friends/groups) persisted to DataStore as comma-separated IDs
 - `hasManualSplits()` detects when group selection would overwrite manual friend selections (triggers confirmation dialog in UI)
@@ -66,6 +67,7 @@ com.splitapp/
 ### SplitwiseRepository
 - Bearer token auth from stored API key
 - `createExpense()` builds form-encoded field map: user 0 = you (paid full amount), users 1..N = friends (paid 0, owe their share)
+- Optional `details` parameter populates the Splitwise expense notes field (used by itemized splits for item breakdown)
 - Payer's owed share is derived from formatted friend shares to ensure exact penny-level totals
 - `syncGroups()` filters out group id=0 ("Non-group expenses") and excludes current user from member lists
 - Friends/groups cached as JSON in DataStore
@@ -110,16 +112,17 @@ com.splitapp/
 
 ## Testing
 
-189 unit tests in `app/src/test/` covering:
-- `TransactionParserTest` (55) — all banks, currencies, keywords, merchant extraction, rejection cases, OTP rejection
+198 unit tests in `app/src/test/` covering:
+- `TransactionParserTest` (54) — all banks, currencies, keywords, merchant extraction, rejection cases, OTP rejection
 - `SplitViewModelTest` (46) — equal split math, group/friend toggle, group-clearing on friend toggle, ratio clamping, pin toggle, itemized mode (init, add/edit/delete, bucket assignment, per-person totals)
 - `GeminiReceiptExtractorTest` (16) — JSON parsing, code fence stripping, real receipt formats, edge cases
 - `FriendSearchAndSortTest` (16) — search by name/email, pin-based sorting, group search
-- `SplitwiseRepositoryTest` (10) — expense field map construction, amount formatting, penny-residual handling
+- `SplitwiseRepositoryTest` (12) — expense field map construction, amount formatting, penny-residual handling, details field
 - `SplitwiseApiModelsTest` (9) — JSON deserialization with @SerializedName
 - `SplitwiseGroupFilterTest` (9) — group id=0 filtering, current user exclusion, JSON round-trips
 - `ModelTest` (9) — Friend displayName, Transaction/OrderItem defaults
 - `MismatchDetectionTest` (8) — item total vs transaction amount mismatch logic
+- `ItemizedDetailsTest` (7) — itemized breakdown text for Splitwise expense notes
 - `GeminiApiModelsTest` (6) — Gemini request/response serialization (snake_case)
 - `ItemizedRoundingTest` (6) — BigDecimal rounding for split amounts
 

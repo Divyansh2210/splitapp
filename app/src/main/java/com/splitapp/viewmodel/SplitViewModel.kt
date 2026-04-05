@@ -347,6 +347,33 @@ class SplitViewModel(application: Application) : AndroidViewModel(application) {
         return totals
     }
 
+    /**
+     * Build a human-readable breakdown of items and who they're assigned to,
+     * to be included as notes/details on the Splitwise expense.
+     */
+    private fun buildItemizedDetails(state: ItemizedUiState, currentUserId: Long): String {
+        val lines = mutableListOf<String>()
+        lines.add("Item breakdown:")
+        for (item in state.items) {
+            val bucket = state.buckets[item.id] ?: state.allParticipantIds
+            val names = bucket.map { state.participantNames[it] ?: "Unknown" }.sorted()
+            val assignedTo = if (bucket == state.allParticipantIds) "Everyone" else names.joinToString(", ")
+            val feeTag = if (item.isFee) " [Fee]" else ""
+            lines.add("• ${item.name}$feeTag — ₹${"%.2f".format(item.price)} → $assignedTo")
+        }
+
+        lines.add("")
+        lines.add("Per-person totals:")
+        val perPerson = computePerPersonTotals()
+        for ((pid, amount) in perPerson.entries.sortedBy { state.participantNames[it.key] ?: "" }) {
+            val name = state.participantNames[pid] ?: "Unknown"
+            val rounded = BigDecimal(amount).setScale(2, RoundingMode.HALF_UP)
+            lines.add("• $name: ₹$rounded")
+        }
+
+        return lines.joinToString("\n")
+    }
+
     /** Submit the itemized split to Splitwise. */
     fun submitItemizedSplit(transaction: Transaction, groupId: Long?, description: String) {
         viewModelScope.launch {
@@ -357,8 +384,9 @@ class SplitViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
+            val state = _itemizedState.value
             val perPerson = computePerPersonTotals()
-            val itemTotal = _itemizedState.value.items.sumOf { it.price }
+            val itemTotal = state.items.sumOf { it.price }
 
             // Round each share to 2 decimal places
             val friendSplits = perPerson
@@ -367,12 +395,16 @@ class SplitViewModel(application: Application) : AndroidViewModel(application) {
                     Pair(friendId, BigDecimal(amount).setScale(2, RoundingMode.HALF_UP).toDouble())
                 }
 
+            // Build itemized breakdown for Splitwise expense notes
+            val details = buildItemizedDetails(state, currentUserId)
+
             repo.createExpense(
                 totalAmount = BigDecimal(itemTotal).setScale(2, RoundingMode.HALF_UP).toDouble(),
                 description = description,
                 currentUserId = currentUserId,
                 splits = friendSplits,
-                groupId = groupId
+                groupId = groupId,
+                details = details
             ).onSuccess {
                 db.transactionDao().delete(transaction.id)
                 _itemizedState.value = ItemizedUiState.Idle

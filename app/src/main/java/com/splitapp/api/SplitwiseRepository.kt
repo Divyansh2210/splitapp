@@ -110,19 +110,22 @@ class SplitwiseRepository(private val prefs: PreferencesStore) {
      * @param currentUserId Your Splitwise user ID
      * @param splits        List of (friendId, owedAmount)
      * @param groupId       Optional group to associate the expense with
+     * @param details       Optional notes/breakdown shown below the description on Splitwise
      */
     suspend fun createExpense(
         totalAmount: Double,
         description: String,
         currentUserId: Long,
         splits: List<Pair<Long, Double>>,
-        groupId: Long? = null
+        groupId: Long? = null,
+        details: String? = null
     ): Result<Unit> = runCatching {
         val fields = mutableMapOf<String, String>()
         fields["cost"] = "%.2f".format(totalAmount)
         fields["description"] = description
         fields["split_equally"] = "false"
         groupId?.let { fields["group_id"] = it.toString() }
+        details?.let { fields["details"] = it }
 
         // Format each friend's share, then derive payer's share so the total is exact
         val formattedSplits = splits.map { (friendId, owedAmount) ->

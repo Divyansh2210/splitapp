@@ -136,6 +136,26 @@ class SplitwiseRepositoryTest {
         assertEquals("33.30", fields["users__1__owed_share"])
     }
 
+    @Test
+    fun `expense fields include details when provided`() {
+        val fields = buildExpenseFields(
+            totalAmount = 300.0, description = "Groceries",
+            currentUserId = 99L, splits = listOf(Pair(1L, 100.0)),
+            groupId = null, details = "Item breakdown:\n• Milk — ₹50.00 → Everyone"
+        )
+        assertEquals("Item breakdown:\n• Milk — ₹50.00 → Everyone", fields["details"])
+    }
+
+    @Test
+    fun `expense fields omit details when null`() {
+        val fields = buildExpenseFields(
+            totalAmount = 100.0, description = "Test",
+            currentUserId = 99L, splits = listOf(Pair(1L, 50.0)),
+            groupId = null, details = null
+        )
+        assertFalse(fields.containsKey("details"))
+    }
+
     // =========================================================================
     // Helper — mirrors SplitwiseRepository.createExpense field building
     // =========================================================================
@@ -145,13 +165,15 @@ class SplitwiseRepositoryTest {
         description: String,
         currentUserId: Long,
         splits: List<Pair<Long, Double>>,
-        groupId: Long?
+        groupId: Long?,
+        details: String? = null
     ): Map<String, String> {
         val fields = mutableMapOf<String, String>()
         fields["cost"] = "%.2f".format(totalAmount)
         fields["description"] = description
         fields["split_equally"] = "false"
         groupId?.let { fields["group_id"] = it.toString() }
+        details?.let { fields["details"] = it }
 
         // Format each friend's share, then derive payer's share so the total is exact
         val formattedSplits = splits.map { (friendId, owedAmount) ->
